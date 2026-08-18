@@ -1,0 +1,41 @@
+---
+- name: Nasazení projektového Compose stacku
+  hosts: localhost
+  connection: local
+  become: true
+  vars:
+    app_dir: /opt/lab12app
+  tasks:
+    - name: Instalace Dockeru a Compose
+      ansible.builtin.apt:
+        name: [docker.io, docker-compose]
+        state: present
+    - name: Projektový adresář
+      ansible.builtin.file:
+        path: "{{ app_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: Soubory stacku z etapy 2
+      ansible.builtin.copy:
+        src: project/
+        dest: "{{ app_dir }}/"
+        mode: preserve
+
+    - name: Sestavení a spuštění stacku
+      ansible.builtin.command:
+        argv:
+          - docker-compose
+          - -f
+          - "{{ app_dir }}/compose.yaml"
+          - up
+          - -d
+          - --build
+      register: up
+      changed_when: >-
+        'Started' in up.stderr or
+        'Created' in up.stderr or
+        'Creating' in up.stderr or
+        'Recreate' in up.stderr or
+        'Recreating' in up.stderr or
+        'Building' in up.stderr
