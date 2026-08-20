@@ -136,8 +136,7 @@ After successful login, cancel the rollback timer:
 sudo systemctl stop ufw-rollback.timer
 ```
 
-The application web service is bound only to 127.0.0.1, so its port does not need to be opened in UFW.
-
+The application web service is bound only to 127.0.0.1, so port 8092 is not publicly accessible. The Uptime Kuma dashboard is intentionally published on all host interfaces on port 3001. Docker manages this published port independently of UFW, and this exposure is intentional so the dashboard can be accessed remotely.
 
 ### 6. Fail2Ban
 
