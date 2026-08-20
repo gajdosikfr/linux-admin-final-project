@@ -160,3 +160,114 @@ sudo fail2ban-client status sshd
 ```
 
 The output should show one active jail named `sshd`. On this system, the default configuration allows five failed authentication attempts within ten minutes and then bans the offending IP address for ten minutes.
+
+### 7. Final Lynis Audit
+
+Run another Lynis audit after applying the host security configuration:
+
+```bash
+sudo lynis audit system
+```
+
+Record the final Hardening Index and compare it with the initial audit.
+
+### 8. Install Ansible
+
+Install Ansible on the prepared host:
+
+```bash
+sudo apt install ansible -y
+```
+
+Ansible runs locally on the target VM and uses privilege escalation to install Docker and deploy the application stack.
+
+## Application Deployment
+
+The Ansible playbook installs Docker and Docker Compose, copies the project files to `/opt/final_project`, builds the custom web image, and starts the complete Compose stack.
+
+Run the playbook from the repository root:
+
+```bash
+ansible-playbook ansible/playbook.yml -K
+```
+
+The `-K` option prompts for the sudo password required by `become: true`.
+
+Run the same command a second time to verify idempotence:
+
+```bash
+ansible-playbook ansible/playbook.yml -K
+```
+
+The second run should complete with `changed=0`.
+
+### Verify the deployment
+
+Check the state of the Compose stack:
+
+```bash
+sudo docker compose -f /opt/final_project/compose.yaml ps
+```
+
+Verify the web service:
+
+```bash
+curl -fsS http://127.0.0.1:8092
+```
+
+Verify that the persistent Redis volume exists:
+
+```bash
+sudo docker volume inspect final_project_redis_data
+```
+
+The `deploy` user is intentionally not added to the `docker` group. Manual Docker commands are run with `sudo` because access to the Docker socket effectively provides root-level privileges.
+
+The web service is available only locally at `http://127.0.0.1:8092`. The Uptime Kuma dashboard is intentionally available remotely at:
+
+```text
+http://SERVER_IP:3001
+```
+
+## Monitoring
+
+Uptime Kuma is included in the Compose stack and is used to monitor the web service. Its dashboard is available at:
+
+```text
+http://SERVER_IP:3001
+```
+
+Create an HTTP(s) monitor with the following settings:
+
+* **Friendly Name:** `Final Project Web`
+* **URL:** `http://web`
+* **Heartbeat Interval:** `10` seconds
+* **Retries:** `0`
+
+The URL uses the Compose service name `web`, which is resolved through the shared Docker network.
+
+### Test outage detection
+
+First verify that the monitor reports the service as `UP`.
+
+Stop only the web service while keeping Uptime Kuma running:
+
+```bash
+sudo docker compose -f /opt/final_project/compose.yaml stop web
+```
+
+Uptime Kuma should detect the outage and change the monitor status to `DOWN`.
+
+Start the web service again:
+
+```bash
+sudo docker compose -f /opt/final_project/compose.yaml start web
+```
+
+After the next successful check, the monitor should return to `UP`. This verifies the complete monitoring sequence:
+
+```text
+UP → DOWN → UP
+```
+
+In a production environment, Uptime Kuma would be configured to notify the server administrator by email after repeated failed checks.
