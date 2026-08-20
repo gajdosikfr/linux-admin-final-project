@@ -53,9 +53,16 @@ chmod 700 ~/.ssh
 nano ~/.ssh/authorized_keys
 chmod 600 ~/.ssh/authorized_keys
 ```
+
 Generate an SSH key and paste the public key into `~/.ssh/authorized_keys`.
 
 For example, when using PuTTY, generate an Ed25519 key with PuTTYgen, paste the public key into `~/.ssh/authorized_keys`, and verify login using the private key in a second PuTTY session before disabling password authentication.
+
+Before applying the SSH hardening configuration, schedule an automatic rollback. If SSH access fails, the new configuration will be removed and the SSH service reloaded after five minutes:
+
+```bash
+sudo systemd-run --unit=ssh-rollback --on-active=5m /bin/sh -c 'rm -f /etc/ssh/sshd_config.d/99-hardening.conf && systemctl reload ssh'
+```
 
 Copy the provided SSH hardening configuration:
 
@@ -91,6 +98,12 @@ pubkeyauthentication yes
 
 Before closing the current SSH session, open a second session and verify that authentication using the SSH key works correctly.
 
+After successful login in the second session, cancel the rollback timer:
+
+```bash
+sudo systemctl stop ssh-rollback.timer
+```
+
 ### 5. Firewall
 
 Install UFW and configure a default-deny firewall policy:
@@ -100,6 +113,12 @@ sudo apt install ufw -y
 sudo ufw default deny incoming
 sudo ufw default allow outgoing
 sudo ufw allow OpenSSH
+```
+
+Before enabling the firewall, schedule an automatic rollback. If SSH access is blocked, UFW will be disabled after five minutes:
+
+```bash
+sudo systemd-run --unit=ufw-rollback --on-active=5m /usr/sbin/ufw disable
 sudo ufw enable
 ```
 
@@ -109,7 +128,16 @@ Verify the firewall configuration:
 sudo ufw status verbose
 ```
 
+Before cancelling the rollback timer, open a new SSH session and verify that access still works.
+
+After successful login, cancel the rollback timer:
+
+```bash
+sudo systemctl stop ufw-rollback.timer
+```
+
 The application web service is bound only to 127.0.0.1, so its port does not need to be opened in UFW.
+
 
 ### 6. Fail2Ban
 
